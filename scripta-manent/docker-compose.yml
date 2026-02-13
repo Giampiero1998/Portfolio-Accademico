@@ -1,0 +1,107 @@
+# ============================================
+# 🐳 Docker Compose - Scripta Manent Portfolio
+# Version: 1.0.0
+# ============================================
+
+version: '3.8'
+
+services:
+  # ============================================
+  # 🗄️ MONGODB SERVICE
+  # ============================================
+  mongo:
+    image: mongo:8.0-alpine
+    container_name: scripta-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-scripta_manent_db}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - scripta-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ============================================
+  # ⚙️ BACKEND API (Node.js/Express)
+  # ============================================
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: scripta-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5000
+      MONGO_URI: mongodb://mongo:27017/${MONGO_DB_NAME:-scripta_manent_db}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    networks:
+      - scripta-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # 🎨 FRONTEND (React/Vite)
+  # ============================================
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+    container_name: scripta-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+      VITE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      - backend
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    networks:
+      - scripta-network
+
+# ============================================
+# 📦 VOLUMES
+# ============================================
+volumes:
+  mongodb_data:
+    driver: local
+    name: scripta_mongodb_data
+  mongodb_config:
+    driver: local
+    name: scripta_mongodb_config
+
+# ============================================
+# 🌐 NETWORKS
+# ============================================
+networks:
+  scripta-network:
+    driver: bridge
+    name: scripta_network

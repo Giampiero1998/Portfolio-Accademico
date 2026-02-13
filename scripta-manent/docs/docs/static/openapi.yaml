@@ -1,0 +1,182 @@
+# /docs/static/openapi.yaml
+openapi: 3.1.0
+info:
+  title: Gestore di Portfolio Accademico API
+  version: v1.0.0
+  description: |
+    API RESTful per l'inserimento manuale e la gestione delle risorse accademiche (Articoli e Citazioni).
+    
+    L'architettura utilizza:
+    *   Filtri avanzati (e.g., year[gte]=2023)
+    *   Ricerca Full-Text (FTS) sui campi titolo/abstract (parametro 'q')
+
+servers:
+  - url: http://localhost:3000/api/portfolio
+    description: URL del server di sviluppo (Docker Container)
+
+# Schemi Dati
+components:
+  schemas:
+    Article:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: ID univoco MongoDB.
+        title:
+          type: string
+          description: Titolo completo dell'articolo.
+        authors:
+          type: array
+          items:
+            type: string
+          description: Lista di autori (gestita come stringa separata da virgole nel form).
+        year:
+          type: integer
+          description: Anno di pubblicazione.
+          format: int32
+        abstract:
+          type: string
+        citations:
+          type: array
+          items:
+            type: string
+            format: uuid # Riferimento a Citation ID (ObjectId)
+          description: Array di riferimenti ID alle citazioni associate.
+    Citation:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: ID univoco MongoDB della citazione.
+        articleId:
+          type: string
+          description: ID dell'Articolo genitore a cui si riferisce questa citazione (Foreign Key).
+        referenceText:
+          type: string
+          description: Testo formattato della citazione (es. formato APA).
+        pagesCited:
+          type: string
+          description: Pagine specifiche da cui è tratta la citazione.
+
+# Endpoint Articoli
+paths:
+  /articles:
+    get:
+      summary: Ottieni la Lista di Articoli
+      description: Recupera tutti gli articoli. Supporta Ricerca Full-Text (parametro 'q') e filtri avanzati.
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Ricerca testuale per Titolo o Abstract (FTS).
+        - in: query
+          name: year[gte]
+          schema:
+            type: integer
+          description: "Filtro avanzato: Articoli pubblicati nell'anno specificato o successivi."
+      responses:
+        '200':
+          description: Lista di articoli con metadati.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Article'
+    post:
+      summary: Crea un nuovo Articolo
+      description: Inserimento manuale di un nuovo articolo nel portfolio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Article'
+            example:
+              title: "Testing Scalable APIs"
+              authors:
+              year: 2024
+      responses:
+        '201':
+          description: Articolo creato con successo.
+
+  /articles/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: ID MongoDB dell'articolo.
+    get:
+      summary: Ottieni un Articolo per ID
+      responses:
+        '200':
+          description: Dettagli dell'articolo.
+        '404':
+          description: Articolo non trovato.
+    patch:
+      summary: Aggiorna Parzialmente un Articolo
+      description: Aggiorna uno o più campi dell'articolo (PATCH).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Article'
+      responses:
+        '200':
+          description: Aggiornamento riuscito.
+    delete:
+      summary: Cancella un Articolo
+      description: Rimuove l'articolo e disassocia tutte le sue citazioni.
+      responses:
+        '204':
+          description: Cancellazione riuscita (No Content).
+ #  Endpoint Citazioni
+  /citations:
+    get:
+      summary: Ottieni la Lista di Citazioni
+      description: Recupera tutte le citazioni. Può essere filtrata per articolo genitore.
+      parameters:
+        - in: query
+          name: articleId
+          schema:
+            type: string
+          description: Filtro per ID Articolo genitore.
+      responses:
+        '200':
+          description: Lista di citazioni.
+    post:
+      summary: Crea una nuova Citazione
+      description: Crea una nuova citazione e la associa all'ID Articolo genitore specificato.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Citation'
+      responses:
+        '201':
+          description: Citazione creata e associata.
+
+  /citations/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: ID MongoDB della citazione.
+    patch:
+      summary: Aggiorna Citazione
+      responses:
+        '200':
+          description: Aggiornamento riuscito.
+    delete:
+      summary: Cancella Citazione
+      description: Rimuove la citazione e la disassocia dall'Articolo genitore (operazione $pull).
+      responses:
+        '204':
+          description: Cancellazione riuscita.

@@ -1,0 +1,40 @@
+# ============================================
+# 🐳 Docker Compose - DEVELOPMENT OVERRIDE
+# Usa: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ============================================
+
+version: '3.8'
+
+services:
+  # ============================================
+  # ⚙️ BACKEND - DEV MODE
+  # ============================================
+  backend:
+    build:
+      target: development
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+      VITE_ENABLE_DEBUG: "true"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - ./server/test:/app/test
+    stdin_open: true
+    tty: true
+
+  # ============================================
+  # 🎨 FRONTEND - DEV MODE
+  # ============================================
+  frontend:
+    build:
+      target: development
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      VITE_ENV: development
+      VITE_ENABLE_DEBUG: "true"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    stdin_open: true
+    tty: true
